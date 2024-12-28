@@ -1,4 +1,3 @@
 # Candle Flash Attention v3 Layer
 
-Flash Attention v2 does not support Turing GPUs (T4, RTX 2080). This layer can be used in replacement of the official
-flash attention Candle layer in the meantime.
+Flash Attention for Hopper (Nvidia SM90a)
