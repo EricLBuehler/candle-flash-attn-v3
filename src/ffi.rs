@@ -42,14 +42,13 @@ extern "C" {
 
         is_bf16: c_int,
         is_causal: c_int,
+        unpadded_lse: c_int,
 
         window_size_left: c_int,
         window_size_right: c_int,
         
         total_q: u32,
         total_k: u32,
-
-        unpadded_lse: bool,
     );
 
 }

@@ -64,14 +64,13 @@ extern "C" void run_mha(
 
     int is_bf16,
     int is_causal,
+    int unpadded_lse,
 
     int window_size_left,
     int window_size_right,
 
     uint32_t total_q,
-    uint32_t total_k,
-
-    bool unpadded_lse
+    uint32_t total_k
 ) {
     Flash_fwd_params params;
     // Reset the parameters

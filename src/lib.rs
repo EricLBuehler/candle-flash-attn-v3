@@ -199,11 +199,11 @@ impl FlashAttn {
                 /* seqlen_k_rounded */ seqlen_k_rounded as u32,
                 /* is_bf16 */ is_bf16,
                 /* is_causal */ is_causal,
+                /* unpadded_lse */ 0,
                 /* window_size_left */ window_size_left,
                 /* window_size_right */ window_size_right,
                 /* total_q, dummy */ 0u32,
                 /* total_k, dummy */ 0u32,
-                /* unpadded_lse */ false,
             )
         }
 
@@ -625,11 +625,11 @@ impl FlashAttnVarLen {
                 /* seqlen_k_rounded */ seqlen_k_rounded as u32,
                 /* is_bf16 */ is_bf16,
                 /* is_causal */ is_causal,
+                /* unpadded_lse */ 1,
                 /* window_size_left */ window_size_left,
                 /* window_size_right */ window_size_right,
                 /* total_q */ total_q as u32,
                 /* total_k */ total_k as u32,
-                /* unpadded_lse */ true,
             )
         }
 
