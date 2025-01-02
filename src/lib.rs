@@ -79,6 +79,9 @@ impl FlashAttn {
         if head_size_og > 256 {
             candle::bail!("only supports head dimension at most 256 (got {head_size_og})")
         }
+        if !(head_size_og == 256 || head_size_og == 128 || head_size_og == 64){
+            candle::bail!("only supports head dimension 64, 128 and 256 (got {head_size_og})")
+        }
         if head_size_og % 8 != 0 {
             // TODO: Handle head sizes that are not a multiple of 8 via some padding.
             candle::bail!("only supports head sizes that are a multiple of 8 (got {head_size_og})")
@@ -412,6 +415,17 @@ impl FlashAttnVarLen {
         v_l: &Layout,
         is_bf16: bool,
     ) -> Result<(candle::CudaStorage, Shape)> {
+
+        // if q_l.is_contiguous() != true {
+        //     candle::bail!("q needs to be contiguous.")
+        // }
+        // if k_l.is_contiguous() != true {
+        //     candle::bail!("q needs to be contiguous.")
+        // }
+        // if v_l.is_contiguous() != true {
+        //     candle::bail!("q needs to be contiguous.")
+        // }
+
         // https://github.com/Dao-AILab/flash-attention/blob/184b992dcb2a0890adaa19eb9b541c3e4f9d2a08/csrc/flash_attn/flash_api.cpp#L327
         let dev = q.device();
         let out_shape = q_l.shape().clone();
@@ -481,12 +495,12 @@ impl FlashAttnVarLen {
         if head_size_og > 256 {
             candle::bail!("only supports head dimension at most 256 (got {head_size_og})")
         }
+        if !(head_size_og == 256 || head_size_og == 128 || head_size_og == 64) {
+            candle::bail!("only supports head dimension 64, 128 and 256 (got {head_size_og})")
+        }
         if head_size_og % 8 != 0 {
             // TODO: Handle head sizes that are not a multiple of 8 via some padding.
             candle::bail!("only supports head sizes that are a multiple of 8 (got {head_size_og})")
-        }
-        if ![64, 128, 256].contains(&head_size_og) {
-            candle::bail!("FA3 currently only implements head_size for 64, 128 or 256")
         }
         if num_heads % num_heads_k != 0 {
             candle::bail!("number of k/v heads {num_heads_k} must divide number of heads in query {num_heads}")
@@ -540,6 +554,9 @@ impl FlashAttnVarLen {
             .filter(|v| v <= &self.max_seqlen_k)
             .map(|v| v as i32)
             .unwrap_or(-1);
+        if window_size_left < self.max_seqlen_k as i32 {
+            window_size_left = self.max_seqlen_k.clone() as i32;
+        }
 
         // if window_size_right > self.max_seqlen_k or None => -1
         let mut window_size_right = self
@@ -547,6 +564,9 @@ impl FlashAttnVarLen {
             .filter(|v| v <= &self.max_seqlen_k)
             .map(|v| v as i32)
             .unwrap_or(-1);
+        if window_size_right < self.max_seqlen_k as i32 {
+            window_size_right = self.max_seqlen_k.clone() as i32;
+        }
 
         let head_size = round_multiple(head_size_og, 8);
         let head_size_rounded = round_multiple(head_size, 32);
