@@ -6,15 +6,19 @@ use candle::cuda_backend::WrapErr;
 use candle::{CpuStorage, DType, Layout, Result, Shape, Tensor};
 use half::{bf16, f16};
 
+use std::sync::Once;
+
+static INIT: Once = Once::new();
+
+fn round_multiple(x: usize, m: usize) -> usize {
+    (x + m - 1) / m * m
+}
+
 pub struct FlashAttn {
     pub softmax_scale: f32,
     pub alibi_slopes: Option<Tensor>,
     pub window_size_left: Option<usize>,
     pub window_size_right: Option<usize>,
-}
-
-fn round_multiple(x: usize, m: usize) -> usize {
-    (x + m - 1) / m * m
 }
 
 impl FlashAttn {
@@ -31,6 +35,10 @@ impl FlashAttn {
         is_bf16: bool,
     ) -> Result<(candle::CudaStorage, Shape)> {
         // https://github.com/Dao-AILab/flash-attention/blob/b252072409e69c25f2b9d473cc534e49b24decd2/csrc/flash_attn/flash_api.cpp#L187
+        INIT.call_once(|| {
+            println!("Using michaelfeil/candle-flash-attn-v3 under custom licence.");
+        });
+
         let dev = q.device();
         let out_shape = q_l.shape().clone();
         let out_l = Layout::contiguous(&out_shape);
@@ -79,7 +87,7 @@ impl FlashAttn {
         if head_size_og > 256 {
             candle::bail!("only supports head dimension at most 256 (got {head_size_og})")
         }
-        if !(head_size_og == 256 || head_size_og == 128 || head_size_og == 64){
+        if !(head_size_og == 256 || head_size_og == 128 || head_size_og == 64) {
             candle::bail!("only supports head dimension 64, 128 and 256 (got {head_size_og})")
         }
         if head_size_og % 8 != 0 {
@@ -415,16 +423,9 @@ impl FlashAttnVarLen {
         v_l: &Layout,
         is_bf16: bool,
     ) -> Result<(candle::CudaStorage, Shape)> {
-
-        // if q_l.is_contiguous() != true {
-        //     candle::bail!("q needs to be contiguous.")
-        // }
-        // if k_l.is_contiguous() != true {
-        //     candle::bail!("q needs to be contiguous.")
-        // }
-        // if v_l.is_contiguous() != true {
-        //     candle::bail!("q needs to be contiguous.")
-        // }
+        INIT.call_once(|| {
+            println!("Using michaelfeil/candle-flash-attn-v3 under custom licence.");
+        });
 
         // https://github.com/Dao-AILab/flash-attention/blob/184b992dcb2a0890adaa19eb9b541c3e4f9d2a08/csrc/flash_attn/flash_api.cpp#L327
         let dev = q.device();
@@ -575,9 +576,7 @@ impl FlashAttnVarLen {
 
         let elem_count = out_shape.elem_count();
         let dst = unsafe { dev.alloc::<T>(elem_count) }.w()?;
-        let softmax_lse = dev
-            .alloc_zeros::<f32>(num_heads * total_q)
-            .w()?;
+        let softmax_lse = dev.alloc_zeros::<f32>(num_heads * total_q).w()?;
 
         let is_bf16 = if is_bf16 { 1 } else { 0 };
 
@@ -594,15 +593,6 @@ impl FlashAttnVarLen {
         if window_size_left >= 0 && window_size_right < 0 {
             window_size_right = self.max_seqlen_k as i32;
         }
-
-        // print with error prio: total_q, total_k, window_size_left, window_size_right
-        println!(
-            "total_q: {}, total_k: {}, window_size_left: {}, window_size_right: {}",
-            total_q, total_k, window_size_left, window_size_right
-        );
-        // print the sequence lengths
-        println!("seqlens_q: {:?}", seqlens_q);
-
         unsafe {
             let q_ptr = *q.device_ptr() as *const core::ffi::c_void;
             let k_ptr = *k.device_ptr() as *const core::ffi::c_void;

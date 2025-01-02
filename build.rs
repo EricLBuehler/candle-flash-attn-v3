@@ -96,7 +96,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=kernels/**.cpp");
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").context("OUT_DIR not set")?);
-    // You can optionally allow an environment variable to cache the compiled artifacts. 
+    // You can optionally allow an environment variable to cache the compiled artifacts.
     // If not found, we compile into the standard OUT_DIR.
     let build_dir = match std::env::var("CANDLE_FLASH_ATTN_BUILD_DIR") {
         Err(_) => out_dir.clone(),
@@ -137,8 +137,8 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    // Decide whether to skip recompile if outputs are up to date. 
-    // This is a simplistic approach, 
+    // Decide whether to skip recompile if outputs are up to date.
+    // This is a simplistic approach,
     // so feel free to refine if you need more robust up-to-date checks.
     let out_modified = out_file
         .metadata()
@@ -151,9 +151,7 @@ fn main() -> Result<()> {
                 .metadata()
                 .and_then(|m| m.modified())
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-            input_modified
-                .duration_since(out_modified)
-                .is_ok() // True if input_modified >= out_modified
+            input_modified.duration_since(out_modified).is_ok() // True if input_modified >= out_modified
         });
 
     if should_compile {
@@ -229,7 +227,10 @@ fn main() -> Result<()> {
             })?;
 
         // 2) Create static library from the .o files
-        let obj_files = cu_files.iter().map(|(_, obj)| obj.clone()).collect::<Vec<_>>();
+        let obj_files = cu_files
+            .iter()
+            .map(|(_, obj)| obj.clone())
+            .collect::<Vec<_>>();
 
         let mut command = std::process::Command::new("nvcc");
         command.arg("--lib");
