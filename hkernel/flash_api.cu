@@ -174,6 +174,13 @@ void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
         HEADDIM_SWITCH(params.d, kHeadDim, [&] {
             run_mha_fwd_<elem_type, kHeadDim>(params, stream);
         });
+        // if(!params.use_gqa_packing) {
+        //   run_mha_fwd_<Element, kHeadSize>(params, stream);
+        // } else {
+        //   QUERYHEAD_SWITCH(params.h_h_k_ratio, kBlockH, [&] {
+        //     run_mha_fwd_gqa_<Element, kHeadSize, kBlockH>(params, stream);
+        //   });
+        // }
     });
 }
 
@@ -219,6 +226,7 @@ extern "C" void run_mha(
     int is_bf16,
     int is_causal,
     int unpadded_lse,
+    int use_gqa_packing,
 
     int window_size_left,
     int window_size_right,
@@ -297,6 +305,7 @@ extern "C" void run_mha(
     params.total_k = total_k;
 
     params.unpadded_lse = unpadded_lse;
+    params.use_gqa_packing = use_gqa_packing;
 
     // print_params(params);
     
