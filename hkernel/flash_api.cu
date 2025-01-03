@@ -172,15 +172,16 @@ void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     // TODO: no GQA switch
     PREC_SWITCH(prec_type, elem_type, [&] {
         HEADDIM_SWITCH(params.d, kHeadDim, [&] {
-            run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+            // run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+            if(!params.use_gqa_packing) {
+                run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+            } else {
+                QUERYHEAD_SWITCH(params.h_h_k_ratio, kBlockH, [&] {
+                    run_mha_fwd_gqa_<elem_type, kHeadDim, kBlockH>(params, stream);
+                });
+            }
         });
-        // if(!params.use_gqa_packing) {
-        //   run_mha_fwd_<Element, kHeadSize>(params, stream);
-        // } else {
-        //   QUERYHEAD_SWITCH(params.h_h_k_ratio, kBlockH, [&] {
-        //     run_mha_fwd_gqa_<Element, kHeadSize, kBlockH>(params, stream);
-        //   });
-        // }
+        
     });
 }
 

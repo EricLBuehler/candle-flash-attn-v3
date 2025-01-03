@@ -97,6 +97,10 @@ impl FlashAttn {
         if num_heads % num_heads_k != 0 {
             candle::bail!("number of k/v heads {num_heads_k} must divide number of heads in query {num_heads}")
         }
+        let use_gqa_packing = match num_heads_k / num_heads {
+            2 | 4 | 8 | 16 | 32 => 1,
+            _ => 0,
+        };
 
         let alibi_slopes_ptr = if let Some(alibi_slopes) = &self.alibi_slopes {
             if alibi_slopes.dtype() != DType::F32 {
@@ -211,7 +215,7 @@ impl FlashAttn {
                 /* is_bf16 */ is_bf16,
                 /* is_causal */ is_causal,
                 /* unpadded_lse */ 0,
-                /* use_gqa_packing */ 0,
+                /* use_gqa_packing */ use_gqa_packing,
                 /* window_size_left */ window_size_left,
                 /* window_size_right */ window_size_right,
                 /* total_q, dummy */ 0u32,
@@ -507,6 +511,10 @@ impl FlashAttnVarLen {
         if num_heads % num_heads_k != 0 {
             candle::bail!("number of k/v heads {num_heads_k} must divide number of heads in query {num_heads}")
         }
+        let use_gqa_packing = match num_heads_k / num_heads {
+            2 | 4 | 8 | 16 | 32 => 1,
+            _ => 0,
+        };
 
         let nseqlens_q = seqlens_q_layout.shape().dims1()?;
         if nseqlens_q < 2 {
@@ -637,7 +645,7 @@ impl FlashAttnVarLen {
                 /* is_bf16 */ is_bf16,
                 /* is_causal */ is_causal,
                 /* unpadded_lse */ 1,
-                /* use_gqa_packing */ 0,
+                /* use_gqa_packing */ use_gqa_packing,
                 /* window_size_left */ window_size_left,
                 /* window_size_right */ window_size_right,
                 /* total_q */ total_q as u32,

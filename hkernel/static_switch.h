@@ -27,12 +27,13 @@
     }                                                                          \
   }()
 
+// if (PRECTYPE == 3) {                                                       
+//       using NAME = cutlass::float_e4m3_t;                                      
+//       return __VA_ARGS__();                                                    
+//     } else // removed this for dropped fp8 support
 #define PREC_SWITCH(PRECTYPE, NAME, ...)                                       \
   [&] {                                                                        \
-    if (PRECTYPE == 3) {                                                       \
-      using NAME = cutlass::float_e4m3_t;                                      \
-      return __VA_ARGS__();                                                    \
-    } else if (PRECTYPE == 2) {                                                \
+    if (PRECTYPE == 2) {                                                       \
       using NAME = cutlass::bfloat16_t;                                        \
       return __VA_ARGS__();                                                    \
     } else {                                                                   \
