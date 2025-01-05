@@ -19,6 +19,7 @@ pub struct FlashAttn {
     pub alibi_slopes: Option<Tensor>,
     pub window_size_left: Option<usize>,
     pub window_size_right: Option<usize>,
+    pub use_gqa_packing: bool,
 }
 
 impl FlashAttn {
@@ -98,7 +99,7 @@ impl FlashAttn {
             candle::bail!("number of k/v heads {num_heads_k} must divide number of heads in query {num_heads}")
         }
         let use_gqa_packing = match num_heads_k / num_heads {
-            2 | 4 | 8 | 16 | 32 => 1,
+            2 | 4 | 8 | 16 | 32 => self.use_gqa_packing as i32,
             _ => 0,
         };
 
@@ -281,6 +282,7 @@ pub fn flash_attn(
     v: &Tensor,
     softmax_scale: f32,
     causal: bool,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let window_size_left = None;
     let window_size_right = if causal { Some(0) } else { None };
@@ -290,6 +292,7 @@ pub fn flash_attn(
         alibi_slopes: None,
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -321,12 +324,14 @@ pub fn flash_attn_windowed(
     softmax_scale: f32,
     window_size_left: Option<usize>,
     window_size_right: Option<usize>,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let op = FlashAttn {
         softmax_scale,
         alibi_slopes: None,
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -352,6 +357,7 @@ pub fn flash_attn_alibi(
     alibi_slopes: &Tensor,
     softmax_scale: f32,
     causal: bool,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let window_size_left = None;
     let window_size_right = if causal { Some(0) } else { None };
@@ -361,6 +367,7 @@ pub fn flash_attn_alibi(
         alibi_slopes: Some(alibi_slopes.clone()),
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -394,12 +401,14 @@ pub fn flash_attn_alibi_windowed(
     softmax_scale: f32,
     window_size_left: Option<usize>,
     window_size_right: Option<usize>,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let op = FlashAttn {
         softmax_scale,
         alibi_slopes: Some(alibi_slopes.clone()),
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -413,6 +422,7 @@ struct FlashAttnVarLen {
     pub alibi_slopes: Option<Tensor>,
     pub window_size_left: Option<usize>,
     pub window_size_right: Option<usize>,
+    pub use_gqa_packing: bool,
 }
 
 impl FlashAttnVarLen {
@@ -512,7 +522,7 @@ impl FlashAttnVarLen {
             candle::bail!("number of k/v heads {num_heads_k} must divide number of heads in query {num_heads}")
         }
         let use_gqa_packing = match num_heads_k / num_heads {
-            2 | 4 | 8 | 16 | 32 => 1,
+            2 | 4 | 8 | 16 | 32 => self.use_gqa_packing as i32,
             _ => 0,
         };
 
@@ -723,6 +733,7 @@ pub fn flash_attn_varlen(
     max_seqlen_k: usize,
     softmax_scale: f32,
     causal: bool,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let window_size_left = None;
     let window_size_right = if causal { Some(0) } else { None };
@@ -736,6 +747,7 @@ pub fn flash_attn_varlen(
         alibi_slopes: None,
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -779,6 +791,7 @@ pub fn flash_attn_varlen_windowed(
     softmax_scale: f32,
     window_size_left: Option<usize>,
     window_size_right: Option<usize>,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let op = FlashAttnVarLen {
         softmax_scale,
@@ -789,6 +802,7 @@ pub fn flash_attn_varlen_windowed(
         alibi_slopes: None,
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -826,6 +840,7 @@ pub fn flash_attn_varlen_alibi(
     max_seqlen_k: usize,
     softmax_scale: f32,
     causal: bool,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let window_size_left = None;
     let window_size_right = if causal { Some(0) } else { None };
@@ -839,6 +854,7 @@ pub fn flash_attn_varlen_alibi(
         alibi_slopes: Some(alibi_slopes.clone()),
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }
@@ -884,6 +900,7 @@ pub fn flash_attn_varlen_alibi_windowed(
     softmax_scale: f32,
     window_size_left: Option<usize>,
     window_size_right: Option<usize>,
+    use_gqa_packing: bool,
 ) -> Result<Tensor> {
     let op = FlashAttnVarLen {
         softmax_scale,
@@ -894,6 +911,7 @@ pub fn flash_attn_varlen_alibi_windowed(
         alibi_slopes: Some(alibi_slopes.clone()),
         window_size_left,
         window_size_right,
+        use_gqa_packing,
     };
     q.apply_op3(k, v, op)
 }

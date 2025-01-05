@@ -45,7 +45,7 @@ fn flash_attn_acausal() -> Result<()> {
         let q = q.transpose(1, 2)?;
         let k = k.transpose(1, 2)?;
         let v = v.transpose(1, 2)?;
-        candle_flash_attn_v3::flash_attn(&q, &k, &v, 0.5, false)?.transpose(1, 2)?
+        candle_flash_attn_v3::flash_attn(&q, &k, &v, 0.5, false, false)?.transpose(1, 2)?
     };
     let ys2 = ys2.i(0)?.to_dtype(DType::F32)?;
     let diff = ys1.sub(&ys2)?.abs()?.flatten_all()?.max(0)?;
@@ -149,7 +149,7 @@ fn flash_attn_acausal_gqa() -> Result<()> {
         let q = q.transpose(1, 2)?;
         let k_gqa = k_gqa.transpose(1, 2)?;
         let v_gqa = v_gqa.transpose(1, 2)?;
-        candle_flash_attn_v3::flash_attn(&q, &k_gqa, &v_gqa, 0.125, false)?.transpose(1, 2)?
+        candle_flash_attn_v3::flash_attn(&q, &k_gqa, &v_gqa, 0.125, false, true)?.transpose(1, 2)?
     };
     let ys2 = ys2.i(0)?.to_dtype(DType::F32)?;
     assert_eq!(ys2.dims(), &[n_h, 2, 64]);
@@ -260,7 +260,7 @@ fn flash_attn_varlen() -> Result<()> {
         let k = k.transpose(0, 1)?;
         let v = v.transpose(0, 1)?;
         candle_flash_attn_v3::flash_attn_varlen(
-            &q, &k, &v, &seqlens_q, &seqlens_q, 2, 2, 0.5, false,
+            &q, &k, &v, &seqlens_q, &seqlens_q, 2, 2, 0.5, false, false,
         )?
         .transpose(0, 1)?
     };
@@ -337,9 +337,10 @@ fn flash_attn_varlen() -> Result<()> {
 
 #[rstest(
     head_dim => [64, 128, 256],
-    seq_len => [2, 4, 9]
+    seq_len => [2, 4, 9],
+    use_gqa_packing => [false], // true does not make sense, as its reset to falser in the function
 )]
-fn flash_attn_varlen_param(head_dim: usize, seq_len: usize) -> Result<()> {
+fn flash_attn_varlen_param(head_dim: usize, seq_len: usize, use_gqa_packing: bool) -> Result<()> {
     let device = Device::new_cuda(0)?;
 
     // Adjust the shape so it reflects seq_len.
@@ -362,10 +363,16 @@ fn flash_attn_varlen_param(head_dim: usize, seq_len: usize) -> Result<()> {
         let k = k.transpose(0, 1)?;
         let v = v.transpose(0, 1)?;
         candle_flash_attn_v3::flash_attn_varlen(
-            &q, &k, &v, &seqlens_q, &seqlens_k, seq_len, // max_seqlen_q
-            seq_len, // max_seqlen_k
-            0.5,     // softmax scale
-            false,   // causal
+            &q,
+            &k,
+            &v,
+            &seqlens_q,
+            &seqlens_k,
+            seq_len,         // max_seqlen_q
+            seq_len,         // max_seqlen_k
+            0.5,             // softmax scale
+            false,           // causal
+            use_gqa_packing, // use_gqa_packing
         )?
         .transpose(0, 1)? // bring it back to (3, seq_len, head_dim)
     };
