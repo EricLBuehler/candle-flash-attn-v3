@@ -1,14 +1,15 @@
 [package]
-name = "candle-flash-attn-v3"
+name = "baseten-candle-flash-attn-v3"
 version = "0.0.1"
 edition = "2021"
 
 description = "Flash attention V3 layer for the candle ML framework."
 keywords = ["blas", "tensor", "machine-learning"]
 categories = ["science"]
-license = "TBD"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 authors = ["Michael Feil"]
+repository = "https://github.com/michaelfeil/candle-flash-attn-v3"
 
 [dependencies]
 candle = { version = "*", package = "candle-core", features = ["cuda"]}

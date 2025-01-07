@@ -6,10 +6,6 @@ use candle::cuda_backend::WrapErr;
 use candle::{CpuStorage, DType, Layout, Result, Shape, Tensor};
 use half::{bf16, f16};
 
-use std::sync::Once;
-
-static INIT: Once = Once::new();
-
 fn round_multiple(x: usize, m: usize) -> usize {
     (x + m - 1) / m * m
 }
@@ -35,11 +31,7 @@ impl FlashAttn {
         v_l: &Layout,
         is_bf16: bool,
     ) -> Result<(candle::CudaStorage, Shape)> {
-        // https://github.com/Dao-AILab/flash-attention/blob/b252072409e69c25f2b9d473cc534e49b24decd2/csrc/flash_attn/flash_api.cpp#L187
-        INIT.call_once(|| {
-            println!("Using michaelfeil/candle-flash-attn-v3 under custom licence.");
-        });
-
+        // https://github.com/Dao-AILab/flash-attention/blob/0dfb28174333d9eefb7c1dd4292690a8458d1e89/hopper/flash_api.cpp
         let dev = q.device();
         let out_shape = q_l.shape().clone();
         let out_l = Layout::contiguous(&out_shape);
@@ -263,7 +255,7 @@ impl candle::CustomOp3 for FlashAttn {
     }
 }
 
-/// Flash-attention v2 layer.
+/// Flash-attention v3 layer.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -274,7 +266,8 @@ impl candle::CustomOp3 for FlashAttn {
 /// * `q` - Query tensor with shape `(batch, seq_len_q, num_heads_q, head_size)`.
 /// * `k` - Key tensor with shape `(batch, seq_len_kv, num_heads_kv, head_size)`.
 /// * `v` - Value tensor with shape `(batch, seq_len_kv, num_heads_kv, head_size)`.
-///
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
+
 /// The resulting tensor has dimensions `(batch, seq_len_q, num_heads_q, head_size)`.
 pub fn flash_attn(
     q: &Tensor,
@@ -297,7 +290,7 @@ pub fn flash_attn(
     q.apply_op3(k, v, op)
 }
 
-/// Flash-attention v2 layer.
+/// Flash-attention v3 layer.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -310,6 +303,7 @@ pub fn flash_attn(
 /// * `v` - Value tensor with shape `(batch, seq_len_kv, num_heads_kv, head_size)`.
 /// * `window_size_left` - Limit left attention to value tokens.
 /// * `window_size_right` - Limit right attention to value tokens.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// # Causal mask
 ///
@@ -336,7 +330,7 @@ pub fn flash_attn_windowed(
     q.apply_op3(k, v, op)
 }
 
-/// Flash-attention v2 layer.
+/// Flash-attention v3 layer.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -348,7 +342,8 @@ pub fn flash_attn_windowed(
 /// * `k` - Key tensor with shape `(batch, seq_len_kv, num_heads_kv, head_size)`.
 /// * `v` - Value tensor with shape `(batch, seq_len_kv, num_heads_kv, head_size)`.
 /// * `alibi_slopes` - Alibi slopes tensor with shape `(num_heads_q)`.
-///
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
+
 /// The resulting tensor has dimensions `(batch, seq_len_q, num_heads_q, head_size)`.
 pub fn flash_attn_alibi(
     q: &Tensor,
@@ -372,7 +367,7 @@ pub fn flash_attn_alibi(
     q.apply_op3(k, v, op)
 }
 
-/// Flash-attention v2 layer.
+/// Flash-attention v3 layer.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -386,6 +381,7 @@ pub fn flash_attn_alibi(
 /// * `alibi_slopes` - Alibi slopes tensor with shape `(num_heads_q)`.
 /// * `window_size_left` - Limit left attention to value tokens.
 /// * `window_size_right` - Limit right attention to value tokens.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// # Causal mask
 ///
@@ -438,11 +434,7 @@ impl FlashAttnVarLen {
         v_l: &Layout,
         is_bf16: bool,
     ) -> Result<(candle::CudaStorage, Shape)> {
-        INIT.call_once(|| {
-            println!("Using michaelfeil/candle-flash-attn-v3 under custom licence.");
-        });
-
-        // https://github.com/Dao-AILab/flash-attention/blob/184b992dcb2a0890adaa19eb9b541c3e4f9d2a08/csrc/flash_attn/flash_api.cpp#L327
+        // https://github.com/Dao-AILab/flash-attention/blob/0dfb28174333d9eefb7c1dd4292690a8458d1e89/hopper/flash_api.cpp
         let dev = q.device();
         let out_shape = q_l.shape().clone();
         let out_l = Layout::contiguous(&out_shape);
@@ -703,7 +695,7 @@ impl candle::CustomOp3 for FlashAttnVarLen {
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Flash-attention v2 layer with variable-length batching.
+/// Flash-attention v3 layer with variable-length batching.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -718,6 +710,7 @@ impl candle::CustomOp3 for FlashAttnVarLen {
 /// * `seqlens_k` - The cumulative lengths of the sequences in the batch, used to index in k and v.
 /// * `max_seqlen_q` - The maximum query sequence length for q in the batch.
 /// * `max_seqlen_k` - The maximum query sequence length for k and v in the batch.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// `seqlens_q` and `seqlens_k` contain `batch_size + 1` elements, typically `0`, `seqlen_1`,
 /// `seqlen_1 + seqlen_2`, etc.
@@ -753,7 +746,7 @@ pub fn flash_attn_varlen(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Flash-attention v2 layer with variable-length batching.
+/// Flash-attention v3 layer with variable-length batching.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -770,6 +763,7 @@ pub fn flash_attn_varlen(
 /// * `max_seqlen_k` - The maximum query sequence length for k and v in the batch.
 /// * `window_size_left` - Limit left attention to value tokens.
 /// * `window_size_right` - Limit right attention to value tokens.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// `seqlens_q` and `seqlens_k` contain `batch_size + 1` elements, typically `0`, `seqlen_1`,
 /// `seqlen_1 + seqlen_2`, etc.
@@ -808,7 +802,7 @@ pub fn flash_attn_varlen_windowed(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Flash-attention v2 layer with variable-length batching.
+/// Flash-attention v3 layer with variable-length batching.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -824,6 +818,7 @@ pub fn flash_attn_varlen_windowed(
 /// * `seqlens_k` - The cumulative lengths of the sequences in the batch, used to index in k and v.
 /// * `max_seqlen_q` - The maximum query sequence length for q in the batch.
 /// * `max_seqlen_k` - The maximum query sequence length for k and v in the batch.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// `seqlens_q` and `seqlens_k` contain `batch_size + 1` elements, typically `0`, `seqlen_1`,
 /// `seqlen_1 + seqlen_2`, etc.
@@ -860,7 +855,7 @@ pub fn flash_attn_varlen_alibi(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Flash-attention v2 layer with variable-length batching.
+/// Flash-attention v3 layer with variable-length batching.
 ///
 /// This implements scaled dot-product attention, `softmax(Q @ K^T . softmax_scale) @ V`.
 /// Multi-query and grouped-query attention are supported by using tensors k and v with fewer heads
@@ -878,6 +873,7 @@ pub fn flash_attn_varlen_alibi(
 /// * `max_seqlen_k` - The maximum query sequence length for k and v in the batch.
 /// * `window_size_left` - Limit left attention to value tokens.
 /// * `window_size_right` - Limit right attention to value tokens.
+/// * `use_gqa_packing` - enables dedicated kernels for GQA packing if head sizes are compatible.
 ///
 /// `seqlens_q` and `seqlens_k` contain `batch_size + 1` elements, typically `0`, `seqlen_1`,
 /// `seqlen_1 + seqlen_2`, etc.
