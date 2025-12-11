@@ -85,11 +85,10 @@ const KERNEL_FILES: &[&str] = &[
 fn main() -> Result<()> {
     // Use RAYON_NUM_THREADS or else default to the number of physical CPUs
     let num_cpus = std::env::var("RAYON_NUM_THREADS").map_or_else(
-        |_| num_cpus::get_physical(),
-        |s| usize::from_str(&s).unwrap_or_else(|_| num_cpus::get_physical()),
+        |_| num_cpus::get_physical().min(20),
+        |s| usize::from_str(&s).unwrap_or_else(|_| num_cpus::get_physical().min(20)),
     );
     // limit to 20 cpus to not use to much ram on large servers
-    let num_cpus = num_cpus.min(20);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_cpus)
