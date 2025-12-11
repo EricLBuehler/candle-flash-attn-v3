@@ -1,4 +1,17 @@
 // build.rs
+
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright (c) 2024 Michael Feil
+// adapted from https://github.com/huggingface/candle-flash-attn-v1 , Oliver Dehaene
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+//
+// Authors explaination: Provide a copy of the first two lines in each redistributed version.
+
 use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 use std::path::PathBuf;
@@ -75,8 +88,8 @@ fn main() -> Result<()> {
         |_| num_cpus::get_physical(),
         |s| usize::from_str(&s).unwrap_or_else(|_| num_cpus::get_physical()),
     );
-    // limit to 16 cpus to not use to much ram on large servers
-    let num_cpus = num_cpus.min(16);
+    // limit to 20 cpus to not use to much ram on large servers
+    let num_cpus = num_cpus.min(20);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_cpus)

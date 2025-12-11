@@ -1,5 +1,5 @@
 [package]
-name = "baseten-candle-flash-attn-v3"
+name = "candle-flash-attn-v3"
 version = "0.0.1"
 edition = "2021"
 
@@ -12,7 +12,7 @@ authors = ["Michael Feil"]
 repository = "https://github.com/michaelfeil/candle-flash-attn-v3"
 
 [dependencies]
-candle = { version = "*", package = "candle-core", features = ["cuda"]}
+candle = { version = "<=0.7.1", package = "candle-core", features = ["cuda"]}
 half = { version = "2.3.1", features = ["num-traits"] }
 
 [build-dependencies]
