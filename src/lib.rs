@@ -21,6 +21,7 @@ use candle::cuda_backend::cudarc::driver::DevicePtr;
 #[cfg(feature = "cuda-11")]
 use candle::cuda_backend::{cudarc::driver::DevicePtr, WrapErr};
 
+#[inline(always)]
 fn round_multiple(x: usize, m: usize) -> usize {
     (x + m - 1) / m * m
 }
@@ -1099,3 +1100,5 @@ pub fn flash_attn_varlen_alibi_windowed(
     };
     q.apply_op3(k, v, op)
 }
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
