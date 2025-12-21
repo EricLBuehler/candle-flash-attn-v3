@@ -10,6 +10,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 authors = ["Michael Feil"]
 repository = "https://github.com/michaelfeil/candle-flash-attn-v3"
+exclude = ["cutlass/docs/**", "cutlass/test/**", "cutlass/examples/**", "cutlass/tools/**", "cutlass/media/**"]
 
 [lib]
 name = "candle_flash_attn_v3"
