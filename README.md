@@ -33,7 +33,7 @@ fn flash_attn_acausal() -> Result<()> {
 candle = { version = "*", package = "candle-core", default-features = false }
 candle-nn = { version = "*" }
 candle-transformers = { version = "*" }
-candle-flash-attn-v3 = { git = "https://github.com/michaelfeil/candle-flash-attn-v3", rev = "main", optional = true }
+candle-flash-attn-3 = { git = "https://github.com/michaelfeil/candle-flash-attn-3", rev = "main", optional = true }
 ```
 
 ### Install and test locally:
