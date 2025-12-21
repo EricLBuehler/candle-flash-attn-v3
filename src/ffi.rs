@@ -9,7 +9,6 @@
 //
 // Authors explaination: Provide a copy of the first two lines in each redistributed version.
 
-
 use core::ffi::{c_int, c_void};
 
 extern "C" {
