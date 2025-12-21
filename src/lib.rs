@@ -21,9 +21,6 @@ use candle::cuda_backend::cudarc::driver::DevicePtr;
 #[cfg(feature = "cuda-11")]
 use candle::cuda_backend::{cudarc::driver::DevicePtr, WrapErr};
 
-#[cfg(any(feature = "cuda-12", feature = "cuda-11"))]
-use candle::cuda_backend::cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT;
-
 fn round_multiple(x: usize, m: usize) -> usize {
     (x + m - 1) / m * m
 }
