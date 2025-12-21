@@ -12,10 +12,17 @@
 mod ffi;
 
 use candle::backend::BackendStorage;
-use candle::cuda_backend::cudarc::driver::DevicePtr;
-use candle::cuda_backend::WrapErr;
 use candle::{CpuStorage, DType, Layout, Result, Shape, Tensor};
 use half::{bf16, f16};
+
+#[cfg(feature = "cuda-12")]
+use candle::cuda_backend::cudarc::driver::DevicePtr;
+
+#[cfg(feature = "cuda-11")]
+use candle::cuda_backend::{cudarc::driver::DevicePtr, WrapErr};
+
+#[cfg(any(feature = "cuda-12", feature = "cuda-11"))]
+use candle::cuda_backend::cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT;
 
 fn round_multiple(x: usize, m: usize) -> usize {
     (x + m - 1) / m * m
@@ -132,7 +139,17 @@ impl FlashAttn {
 
             let alibi_slopes = alibi_slopes.slice(alibi_slopes_layout.start_offset()..);
 
-            *alibi_slopes.device_ptr() as *const core::ffi::c_void
+            #[cfg(feature = "cuda-12")]
+            {
+                let stream = dev.cuda_stream();
+                let stream_ref = stream.as_ref();
+                let (alibi_slopes_devptr, _alibi_sync) = alibi_slopes.device_ptr(stream_ref);
+                alibi_slopes_devptr as usize as *const core::ffi::c_void
+            }
+            #[cfg(feature = "cuda-11")]
+            {
+                *alibi_slopes.device_ptr() as *const core::ffi::c_void
+            }
         } else {
             std::ptr::null()
         };
@@ -157,10 +174,16 @@ impl FlashAttn {
         let seqlen_k_rounded = round_multiple(seqlen_k, 128);
 
         let elem_count = out_shape.elem_count();
+        
+        #[cfg(feature = "cuda-12")]
+        let dst = unsafe { dev.alloc::<T>(elem_count) }?;
+        #[cfg(feature = "cuda-11")]
         let dst = unsafe { dev.alloc::<T>(elem_count) }.w()?;
-        let softmax_lse = dev
-            .alloc_zeros::<f32>(b_sz * 128 * num_heads * seqlen_q)
-            .w()?;
+        
+        #[cfg(feature = "cuda-12")]
+        let softmax_lse = dev.alloc_zeros::<f32>(b_sz * 128 * num_heads * seqlen_q)?;
+        #[cfg(feature = "cuda-11")]
+        let softmax_lse = dev.alloc_zeros::<f32>(b_sz * 128 * num_heads * seqlen_q).w()?;
 
         let is_bf16 = if is_bf16 { 1 } else { 0 };
 
@@ -178,6 +201,72 @@ impl FlashAttn {
             window_size_right = seqlen_k as i32;
         }
 
+        #[cfg(feature = "cuda-12")]
+        {
+            let stream = dev.cuda_stream();
+            let stream_ref = stream.as_ref();
+
+            let (q_devptr, _q_sync) = q.device_ptr(stream_ref);
+            let q_ptr = q_devptr as usize as *const core::ffi::c_void;
+
+            let (k_devptr, _k_sync) = k.device_ptr(stream_ref);
+            let k_ptr = k_devptr as usize as *const core::ffi::c_void;
+
+            let (v_devptr, _v_sync) = v.device_ptr(stream_ref);
+            let v_ptr = v_devptr as usize as *const core::ffi::c_void;
+
+            let (dst_devptr, _dst_sync) = dst.device_ptr(stream_ref);
+            let dst_ptr = dst_devptr as usize as *const core::ffi::c_void;
+
+            let (softmax_lse_devptr, _lse_sync) = softmax_lse.device_ptr(stream_ref);
+            let softmax_lse_ptr = softmax_lse_devptr as usize as *const core::ffi::c_void;
+
+            unsafe {
+                ffi::run_mha(
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    dst_ptr,
+                    softmax_lse_ptr,
+                    /* alibi_slopes_ptr */ alibi_slopes_ptr,
+                    /* cu_seqlens_q_ptr */ std::ptr::null(),
+                    /* cu_seqlens_k_ptr */ std::ptr::null(),
+                    /* q_batch_stride */ q_stride[0] as u32,
+                    /* k_batch_stride */ k_stride[0] as u32,
+                    /* v_batch_stride */ v_stride[0] as u32,
+                    /* o_batch_stride */ o_stride[0] as u32,
+                    /* alibi_slopes_batch_stride */ 0,
+                    /* q_row_stride   */ q_stride[q_rank - 3] as u32,
+                    /* k_row_stride   */ k_stride[k_rank - 3] as u32,
+                    /* v_row_stride   */ v_stride[v_rank - 3] as u32,
+                    /* o_row_stride   */ o_stride[o_rank - 3] as u32,
+                    /* q_head_stride  */ q_stride[q_rank - 2] as u32,
+                    /* k_head_stride  */ k_stride[k_rank - 2] as u32,
+                    /* v_head_stride  */ v_stride[v_rank - 2] as u32,
+                    /* o_head_stride  */ o_stride[o_rank - 2] as u32,
+                    /* b */ b_sz as u32,
+                    /* h */ num_heads as u32,
+                    /* h_k */ num_heads_k as u32,
+                    /* d */ head_size as u32,
+                    /* d_rounded */ head_size_rounded as u32,
+                    /* softmax_scale*/ self.softmax_scale,
+                    /* seqlen_q */ seqlen_q as u32,
+                    /* seqlen_k */ seqlen_k as u32,
+                    /* seqlen_q_rounded */ seqlen_q_rounded as u32,
+                    /* seqlen_k_rounded */ seqlen_k_rounded as u32,
+                    /* is_bf16 */ is_bf16,
+                    /* is_causal */ is_causal,
+                    /* unpadded_lse */ 0,
+                    /* use_gqa_packing */ use_gqa_packing,
+                    /* window_size_left */ window_size_left,
+                    /* window_size_right */ window_size_right,
+                    /* total_q, dummy */ 0u32,
+                    /* total_k, dummy */ 0u32,
+                )
+            }
+        }
+
+        #[cfg(feature = "cuda-11")]
         unsafe {
             let q_ptr = *q.device_ptr() as *const core::ffi::c_void;
             let k_ptr = *k.device_ptr() as *const core::ffi::c_void;
@@ -566,7 +655,17 @@ impl FlashAttnVarLen {
 
             let alibi_slopes = alibi_slopes.slice(alibi_slopes_layout.start_offset()..);
 
-            *alibi_slopes.device_ptr() as *const core::ffi::c_void
+            #[cfg(feature = "cuda-12")]
+            {
+                let stream = dev.cuda_stream();
+                let stream_ref = stream.as_ref();
+                let (alibi_slopes_devptr, _alibi_sync) = alibi_slopes.device_ptr(stream_ref);
+                alibi_slopes_devptr as usize as *const core::ffi::c_void
+            }
+            #[cfg(feature = "cuda-11")]
+            {
+                *alibi_slopes.device_ptr() as *const core::ffi::c_void
+            }
         } else {
             std::ptr::null()
         };
@@ -597,7 +696,15 @@ impl FlashAttnVarLen {
         let seqlen_k_rounded = round_multiple(self.max_seqlen_k, 128);
 
         let elem_count = out_shape.elem_count();
+        
+        #[cfg(feature = "cuda-12")]
+        let dst = unsafe { dev.alloc::<T>(elem_count) }?;
+        #[cfg(feature = "cuda-11")]
         let dst = unsafe { dev.alloc::<T>(elem_count) }.w()?;
+        
+        #[cfg(feature = "cuda-12")]
+        let softmax_lse = dev.alloc_zeros::<f32>(num_heads * total_q)?;
+        #[cfg(feature = "cuda-11")]
         let softmax_lse = dev.alloc_zeros::<f32>(num_heads * total_q).w()?;
 
         let is_bf16 = if is_bf16 { 1 } else { 0 };
@@ -615,6 +722,79 @@ impl FlashAttnVarLen {
         if window_size_left >= 0 && window_size_right < 0 {
             window_size_right = self.max_seqlen_k as i32;
         }
+
+        #[cfg(feature = "cuda-12")]
+        {
+            let stream = dev.cuda_stream();
+            let stream_ref = stream.as_ref();
+
+            let (q_devptr, _q_sync) = q.device_ptr(stream_ref);
+            let q_ptr = q_devptr as usize as *const core::ffi::c_void;
+
+            let (k_devptr, _k_sync) = k.device_ptr(stream_ref);
+            let k_ptr = k_devptr as usize as *const core::ffi::c_void;
+
+            let (v_devptr, _v_sync) = v.device_ptr(stream_ref);
+            let v_ptr = v_devptr as usize as *const core::ffi::c_void;
+
+            let (dst_devptr, _dst_sync) = dst.device_ptr(stream_ref);
+            let dst_ptr = dst_devptr as usize as *const core::ffi::c_void;
+
+            let (softmax_lse_devptr, _lse_sync) = softmax_lse.device_ptr(stream_ref);
+            let softmax_lse_ptr = softmax_lse_devptr as usize as *const core::ffi::c_void;
+
+            let (seqlens_q_devptr, _seqlens_q_sync) = seqlens_q.device_ptr(stream_ref);
+            let seqlens_q_ptr = seqlens_q_devptr as usize as *const core::ffi::c_int;
+
+            let (seqlens_k_devptr, _seqlens_k_sync) = seqlens_k.device_ptr(stream_ref);
+            let seqlens_k_ptr = seqlens_k_devptr as usize as *const core::ffi::c_int;
+
+            unsafe {
+                ffi::run_mha(
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    dst_ptr,
+                    softmax_lse_ptr,
+                    /* alibi_slopes_ptr */ alibi_slopes_ptr,
+                    /* cu_seqlens_q_ptr */ seqlens_q_ptr,
+                    /* cu_seqlens_k_ptr */ seqlens_k_ptr,
+                    /* q_batch_stride */ 0,
+                    /* k_batch_stride */ 0,
+                    /* v_batch_stride */ 0,
+                    /* o_batch_stride */ 0,
+                    /* alibi_slopes_batch_stride */ 0,
+                    /* q_row_stride   */ q_stride[q_rank - 3] as u32,
+                    /* k_row_stride   */ k_stride[k_rank - 3] as u32,
+                    /* v_row_stride   */ v_stride[v_rank - 3] as u32,
+                    /* o_row_stride   */ o_stride[o_rank - 3] as u32,
+                    /* q_head_stride  */ q_stride[q_rank - 2] as u32,
+                    /* k_head_stride  */ k_stride[k_rank - 2] as u32,
+                    /* v_head_stride  */ v_stride[v_rank - 2] as u32,
+                    /* o_head_stride  */ o_stride[o_rank - 2] as u32,
+                    /* b */ batch_size as u32,
+                    /* h */ num_heads as u32,
+                    /* h_k */ num_heads_k as u32,
+                    /* d */ head_size as u32,
+                    /* d_rounded */ head_size_rounded as u32,
+                    /* softmax_scale*/ self.softmax_scale,
+                    /* seqlen_q */ self.max_seqlen_q as u32,
+                    /* seqlen_k */ self.max_seqlen_k as u32,
+                    /* seqlen_q_rounded */ seqlen_q_rounded as u32,
+                    /* seqlen_k_rounded */ seqlen_k_rounded as u32,
+                    /* is_bf16 */ is_bf16,
+                    /* is_causal */ is_causal,
+                    /* unpadded_lse */ 1,
+                    /* use_gqa_packing */ use_gqa_packing,
+                    /* window_size_left */ window_size_left,
+                    /* window_size_right */ window_size_right,
+                    /* total_q */ total_q as u32,
+                    /* total_k */ total_k as u32,
+                )
+            }
+        }
+
+        #[cfg(feature = "cuda-11")]
         unsafe {
             let q_ptr = *q.device_ptr() as *const core::ffi::c_void;
             let k_ptr = *k.device_ptr() as *const core::ffi::c_void;

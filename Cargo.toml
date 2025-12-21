@@ -11,8 +11,19 @@ readme = "README.md"
 authors = ["Michael Feil"]
 repository = "https://github.com/michaelfeil/candle-flash-attn-v3"
 
+[lib]
+name = "candle_flash_attn_v3"
+path = "src/lib.rs"
+
+[features]
+default = ["cuda-12"]
+# Use cuda-12 for candle 0.9+ with cudarc 0.16+ (new API)
+# Use cuda-11 for older candle versions (pre-0.9) with older cudarc API
+cuda-12 = []
+cuda-11 = []
+
 [dependencies]
-candle = { version = "<=0.7.1", package = "candle-core", features = ["cuda"]}
+candle = { version = ">=0.1", package = "candle-core", features = ["cuda"]}
 half = { version = "2.3.1", features = ["num-traits"] }
 
 [build-dependencies]
@@ -22,5 +33,5 @@ rayon = "1.7.0"
 
 [dev-dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-candle-nn = { version = "0.8.1", features = ["cuda"] }
+candle-nn = { version = "0.9.1", features = ["cuda"] }
 rstest = "0.23"
